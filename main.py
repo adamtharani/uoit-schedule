@@ -74,7 +74,7 @@ class Server(SimpleHTTPRequestHandler):
             else:
                 output += 'successfully!</h1>'
             output += '<h2><a class="button" download="%s" href="%s" title="Download Schedule">Download Schedule</a></h2>' % (
-                post_data['username'] + '.ics', encoded_schedule)
+                post_data['username'] + ' - ' + post_data.get("start_date") + '.ics', encoded_schedule)
             output += '<a href="/"">go back</a>'
 
             self.write_template(output)
