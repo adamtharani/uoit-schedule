@@ -2,9 +2,9 @@
 from bs4 import BeautifulSoup
 from ics import Calendar, Event
 import requests
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import weekday
-
+from dateutil.tz import gettz
 lookup_table = {}
 
 def timezone_offset(date_):
@@ -32,7 +32,7 @@ def parse_schedule(soup):
                        for tr in meta_table.findNext('table').findAll('tr')[1:] if meta_table.findNext('table').find('caption').string == "Scheduled Meeting Times"]
         for row in times_table:
             times, day, location, dates, kind, instructor = [
-                td.string.replace('\xa0', '') if td.string else '' for td in row][1:]
+                td.string.replace('\xa0', '') if td.string else td.text for td in row][1:]
             try:
                 start_time, end_time = (datetime.strptime(
                     time_string, "%I:%M %p") for time_string in times.split(' - '))
@@ -48,15 +48,17 @@ def parse_schedule(soup):
             for date_ in class_dates:
                 datetime_ = datetime(
                     year=date_.year, month=date_.month, day=date_.day)
-                start_datetime = datetime_ + timedelta(hours=start_time.hour + timezone_offset(
-                    date_), minutes=start_time.minute, seconds=start_time.second)
-                end_datetime = datetime_ + timedelta(hours=end_time.hour + timezone_offset(
-                    date_), minutes=end_time.minute, seconds=end_time.second)
+                start_datetime = (datetime_ + timedelta(hours=start_time.hour, minutes=start_time.minute, seconds=start_time.second)).replace(tzinfo=gettz('America/Toronto'))
+                end_datetime = (datetime_ + timedelta(hours=end_time.hour, minutes=end_time.minute, seconds=end_time.second)).replace(tzinfo=gettz('America/Toronto'))
                 event = Event(begin=start_datetime, end=end_datetime)
-                event.name = course_title + ' ' + kind
-                event.location = location.split()[-1]
-                event.description = 'CRN: %s\nCourse Code: %s\nSection: %s\nInstructor:%s\n' % (
-                    crn.string, course_code, course_section, instructor)
+                event.name = kind + ': ' + course_title
+                event.summary = kind + ': ' + course_title
+                if 'Synchronous' in location:
+                    event.location = 'OT Online'
+                else:
+                    event.location = f'Ontario Tech University\n2000 Simcoe St N, Oshawa, ON L1G 0C5\n{location}'
+                event.description = 'CRN: %s\nCourse Code: %s\nSection: %s\nInstructor: %s\n' % (
+                    crn.string, course_code, course_section, instructor.replace('   ', ' '))
                 events += [event]
 
     return events, warnings
@@ -81,5 +83,5 @@ def get_schedule(username, password, start_date):
         if soup.find('title').string == 'User Login':
             return False, []
         events, warnings = parse_schedule(soup)
-        calendar = Calendar(events=events)
+        calendar = Calendar(events=events).serialize()
         return calendar, warnings
